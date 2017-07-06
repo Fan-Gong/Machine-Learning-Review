@@ -9,7 +9,7 @@ Classification
 Preview
 -------
 
-In terms of classification problems, we want solve the quesiton of estimating *P**r*(*Y* = *k*|*X* = *x*<sub>0</sub>).
+In terms of classification problems, we want solve the quesiton of estimating *Pr*(*Y* = *k*|*X* = *x*<sub>0</sub>).
 
 -   For logistic regression, we assign this probability to logistic function. The *linear* decision boundary is easy to find when *P* = 0.5.
 
