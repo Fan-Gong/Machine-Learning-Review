@@ -1,3 +1,7 @@
 # Machine-Learning-Review
 
-This repository contains all the summary materials I made during the review of the book "An Introduction to Statistical Learning".
+##Classification:
+* Logistic Regression
+* Linear Discriminant Analysis
+* Quadratic Discriminant Analysis
+* K Nearest Neighbors Algorithm
