@@ -1,6 +1,6 @@
 # Machine-Learning-Review
 
-##Classification:
+## Classification:
 * Logistic Regression
 * Linear Discriminant Analysis
 * Quadratic Discriminant Analysis
