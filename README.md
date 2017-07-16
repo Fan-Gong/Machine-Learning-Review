@@ -5,3 +5,8 @@
 * Linear Discriminant Analysis
 * Quadratic Discriminant Analysis
 * K Nearest Neighbors Algorithm
+
+## Principal Component Analysis
+* What is Principal Component 
+* How does PCA works
+* How to perform PCA in R
