@@ -1,0 +1,71 @@
+---
+title: "PCA"
+author: "Fan Gong"
+date: "2017/7/16"
+output: github_document
+---
+
+#What Are Principal Components
+PCA finds a low-dimensional representation of a data set that contains as much as possible of the variation. Each of the dimensions found by PCA is a linear combination of the p features. 
+
+##Basic Concepts and Math Theory
+The first PC of a set of features $X_1,X_2,...,X_p$ is the normalized linear combination of the features:$Z_1 =\phi_{11}X_1+\phi_{21}X_2+...+\phi_{p1}X_p$ that has the largest variance. By **normalized**, we mean $\sum_{j=1}^{p}\phi_{j1}^{2}=1$. We refer to the elements $\phi_{11},...,\phi_{p1}$ as the **loadings**.
+
+Given a $n \times p$ data set $X$, we need to center $X$ to have mean zero in every column, otherwise the column which has large absolute value will give much weight in first PC. Then we look for the linear combination of the sample feature values of the form:
+
+$z_{i1}=\phi_{11}x_{i1}+\phi_{21}x_{i2}+\dots+\phi_{p1}x_{ip}$ subject to $\sum_{j=1}^p\phi_{j1}^2=1$. In other words, the frst PC loading vector solves the optimization problem that maximize the sum of variance: $maximize\{\frac{1}{n}\sum_{i=1}^{n}(\sum_{j=1}^p\phi_{j1}x_{ij})^2\}$ subject to $\sum_{j=1}^{p}\phi_{j1}^{2}=1$. This equals to maximize $\frac{1}{n}\sum_{i=1}^{n}z_{i1}^2$. Hence the objective that we are maximizing is just the sample variance of the n values of $z_{i1}$. We refer to $z_{11},\dots,z_{n1}$ as the **scores** of the first PC. 
+
+The sceond PC is the linear combinations that are *uncorrelated* with $Z_1$. 
+
+Once we have computed the principal components, we can plot them against each other in order to produce low-dimensional views of the data.
+
+##Another interpretation of PC
+The first PC loading vector has a very special property: it is the line in p-dimentsional space that is closest to the n observations. Using this interpretation, together the first M principal component score vectors and the first M PC loading vectors provide the best M-dimensional approximation.
+
+##More on PCA
+###Scaling the Variables
+Because the variables are measured in different units, if we perform PCA on the unscaled variables, then the first PC loading vector will have a very large loading for the variable which has a large absolute value and large variance. But if the variables are measured in the same units, we might choose not to scale the variable to each have std one.
+###The Proportion of Variance Explained(PVE)
+The **total variance** present in a data set is defined as $\sum_{j=1}^pVar(X_j)=\sum_{j}^p\frac{1}{n}\sum_{i=1}^{n}x_{ij}^2$ and the **variance explained** by the mth PC is $\frac{1}{n}\sum_{i=1}^nz_{im}^2$, so the PVE of the mth PC is given by:
+
+$\frac{\frac{1}{n}\sum_{i=1}^nz_{im}^2}{\sum_{j=1}^pVar(X_j)=\sum_{j}^p\frac{1}{n}\sum_{i=1}^{n}x_{ij}^2}$
+
+###Deciding How Many PC to Use
+We tend to look at the first few principal components in order to find interesting patterns in the data. If no interesting patterns are found in the first few principal components, then further principal components are unlikely to be of interest.
+
+#Use R to implement PCA
+```{r}
+#We perform PCA on the USArrests data set
+pr.out = prcomp(USArrests, scale = T )
+
+#The center and scale components correspond to the means and std prior scaling
+pr.out$center
+pr.out$scale
+
+#The rotation matrix provides the principal components loadings
+pr.out$rotation
+
+#The PC score vectors. The kth column is the kth PC score vector.
+pr.out$x
+
+#Plot the first two PC
+##scale = 0 ensures that the arrows are scaled to represent the loadings.
+biplot(pr.out, scale = 0)
+
+#PVE(proportion of variance explained)
+sm = summary(pr.out)
+sm
+#Plot the PVE explained by each component, as well as cumulative PVE
+library(ggplot2)
+library(reshape2)
+data = sm$importance[-1,]
+df = melt(data)
+
+ggplot(data = df, aes(x = Var2, y = value, group = Var1, color = Var1)) + geom_line() + geom_point() + facet_grid(Var1~.) + xlab(" Principal Component ") + ylab("Percentage") + scale_color_discrete("Color")
+
+```
+
+
+
+
+
