@@ -10,3 +10,8 @@
 * What is Principal Component 
 * How does PCA works
 * How to perform PCA in R
+
+## Clustering
+* K-means
+* Hierarchical Clustering
+* Clustering by using PCs
