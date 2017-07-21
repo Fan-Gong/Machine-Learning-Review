@@ -15,3 +15,6 @@
 * K-means
 * Hierarchical Clustering
 * Clustering by using PCs
+
+## Support Vector Machine
+
