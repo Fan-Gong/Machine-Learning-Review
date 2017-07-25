@@ -17,4 +17,6 @@
 * Clustering by using PCs
 
 ## Support Vector Machine
-
+* Maximal Margin Classifier
+* Support Vector Classifier
+* Support Vector Machine
