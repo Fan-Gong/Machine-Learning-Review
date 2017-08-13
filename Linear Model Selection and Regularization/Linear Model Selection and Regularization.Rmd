@@ -1,0 +1,325 @@
+---
+title: "Linear Model Selection and Regularization"
+author: "Fan Gong"
+date: "2017/8/6"
+output:
+  github_document: default
+---
+
+# Linear Model Selection and Regularization
+
+##Overview
+
+We would like to use another fitting procedure instead of least squares, because alternative fitting procedures can yield better prediction accuracy and model interpretability.
+
+We will discuss three important classes of methods:
+
+* Subset Selection: This approach involves identifying a subset of the p predictors that we believe to be related to the response.
+
+* Shrinkage (regularization): This approach involves fitting a model involving all p predictors. However, the estimated coefficients are shrunken towards zero relative to the least squares estimates.
+
+* Dimension Reduction : This approach involves projecting the p predictors into a M-dimensional subspace, where M < p.
+
+##Subset Selection
+
+###Best Subset Selection 
+To perform best subset selection, we fit a separate least squares regression for each possible combination of the p predictors.
+
+####Implementation in R
+`regsubsets()` function in `leaps` library could perform best subset selection by identifying the best model that contains a given number of predictors, where best is quantified using RSS.
+```{r, message=FALSE}
+#Data Pre-processing
+library(ISLR)
+names(Hitters)
+Hitters = na.omit(Hitters)
+dim(Hitters)
+
+#Best Subset Selection
+##By default, regsubsets only reports results up to eight variable.
+library(leaps)
+library(ggplot2)
+regfit.full = regsubsets(Salary~., data = Hitters, nvmax = 6)
+summary(regfit.full)
+
+#The procedure of variable selection from the full model
+regfit.full = regsubsets(Salary~., data = Hitters, nvmax = 19)
+reg.summary = summary(regfit.full)
+names(reg.summary)
+
+##Find the optimal model
+par(mfrow =c(2,2))
+##RSS
+plot(reg.summary$rss ,xlab=" Number of Variables ",ylab="RSS", type="l")
+##Adjusted R2
+plot(reg.summary$adjr2 ,xlab =" Number of Variables ", ylab=" Adjusted RSq",type="l")
+max = which.max(reg.summary$adjr2);max
+points(x = max, y = reg.summary$adjr2[max], col = "red", cex = 2, pch = 20)
+##Cp
+plot(reg.summary$cp ,xlab =" Number of Variables ", ylab="Cp", type="l")
+min_cp = which.min(reg.summary$cp);min_cp
+points(x = min_cp, y = reg.summary$cp[min_cp], col = "red", cex = 2, pch = 20)
+##BIC
+plot(reg.summary$bic ,xlab =" Number of Variables ", ylab="BIC", type="l")
+min_bic = which.min(reg.summary$bic);min_bic
+points(x = min_bic, y = reg.summary$cp[min_bic], col = "red", cex = 2, pch = 20)
+
+
+##Use built-in plot in regsubsets
+##The top row of each plot contains a black square for each variable selected according to the optimal model associated with that statistic
+par(mfrow =c(1,2))
+plot(regfit.full, scale = "r2")
+plot(regfit.full, scale = "adjr2")
+plot(regfit.full, scale = "Cp")
+plot(regfit.full, scale = "bic")
+
+```
+
+###Stepwise Selection
+For computational reasons, best subset selection cannot be applied with very large p. Stepwise methods, which explore a far more restricted set of models, are attractive alternatives to best subset selection.
+
+####Forward Stepwise Selection
+
+* Forward stepwise selection begins with a model containing no predictors, and then adds predictors to the model, one-at-a-time, until all of the predictors are in the model.
+
+* Forward stepwise selection is not guaranteed to yield the best
+model containing a subset of the p predictors, since it is a greedy algorithm.
+
+* Forward stepwise selection can be applied even in the high-dimensional setting where n < p; however, in this case, it is possible to construct submodels M0, M1.. Mn-1 only, since each submodel is fit using least squares, which will not yield a unique solution if p > n.
+
+####Backward Stepwise Selection
+* Backward stepwise selection begins with the full least squares model containing all p predictors, and then iteratively removes the least useful predictor, one-at-a-time.
+
+* Also, backward stepwise selection is not guaranteed to yield the best model.
+
+* Backward selection requires that the number of samples n is larger than the number of variables p (so that the full model can be fit).
+
+#####Implementation in R
+We can also use the `regsubsets()` function to perform forward stepwise or backward stepwise selection, using the argument `method = "forward"` or `method = "backward"`
+```{r}
+regfit.fwd = regsubsets(Salary~., data = Hitters, nvmax = 19, method = "forward")
+coef(regfit.fwd, 7)
+regfit.bwd = regsubsets(Salary~., data = Hitters, nvmax = 19, method = "backward")
+coef(regfit.bwd, 7)
+```
+
+####Choosing the Optimal Model
+
+We wish to choose a model with a low test error, there are two common approaches:
+
+1. Indirectly estimate test error by making an adjustment to the training error to account for the bias due to overfitting.
+
+  + $C_p = \frac{1}{n}(RSS+2d\hat{\sigma}^2)$. The $C_p$ statistics adds a penalty of $2d\hat{\sigma}^2$ to the training RSS. If $\hat{\sigma}^2$ is unbiased estimate, then $C_p$ is an unbiased estimate of test MSE.
+  + $AIC = \frac{1}{n\hat{\sigma}^2}(RSS + 2d\hat{\sigma}^2)$. For least squares models, $C_p$ and $AIC$ are proportional to each other.
+  + $BIC = \frac{1}{n}(RSS+log(n)d\hat{\sigma}^2)$. Since $logn>2$ for any n >7, the BIC statistics places a heavier penalty on models than $C_p$, which means it tends to choose a more simple model.
+  + $Adjusted\quad R^2=1-\frac{RSS/(n-d-1)}{TSS/n-1}$. The intuition behind it is that adding noise varibales leads to an increase in d, such variables will lead to an increase in $\frac{RSS}{n-d-1}$, and consequently a decrease in the adjusted $R^2$.
+
+2. Directly estimate the test error, using either a validation set approach or a cross-validation approach.
+
+We can directly estimate the test error using the validation set and cross-validation methods. We can select a model using the one-standard-error rule. We first calculate the standard error of the estimated test MSE for each model size, and then select the smallest model for which the estimated test error is within one
+standard error of the lowest point on the curve. The rationale here is that if a set of models appear to be more or less equally good, then we might as well choose the simplest model.
+
+#####Implementation in R
+We will choose among models using the validation set approach and corss-validation.
+Since there is no `predict()` method for `regsubsets()`, we need to construct X matrix by using `model.matrix()` and loop through different models to calculate the prediction value.
+
+######Validation Set
+```{r, message=FALSE}
+set.seed(1)
+train = sample(c(TRUE,FALSE), nrow(Hitters), replace = T)
+test = (!train)
+
+#Full model
+regfit.best = regsubsets(Salary~., data = Hitters[train,], nvmax = 19)
+#Test X matrix 
+test.mat = model.matrix(Salary~., data = Hitters[test,])
+#Test error vector
+val.errors = rep(NA, 19)
+for(i in 1:19){
+  coefi = coefficients(regfit.best, id = i)
+  pred = test.mat[,names(coefi)] %*% coefi
+  val.errors[i] = mean((Hitters$Salary[test] - pred)^2)
+}
+val.errors
+#Variable selection
+which.min(val.errors)
+
+```
+
+######Cross-Validation
+```{r, message=FALSE}
+#Ten folds CV
+##(i,j)th element corresponds to the test MSE for the ith cv fold for the best j-variable model.
+k = 10
+folds = sample(1:k, nrow(Hitters), replace = T)
+cv.errors = matrix(NA, k, 19, dimnames = list(NULL, paste(1:19)))
+for(j in 1:k){
+  best.fit = regsubsets(Salary~., data = Hitters[folds != j,], nvmax = 19)
+  for(i in 1:19){
+    test.mat = model.matrix(Salary~., data = Hitters[folds == j,])
+    coefi = coefficients(best.fit, id = i)
+    pred = test.mat[, names(coefi)] %*% coefi
+    cv.errors[j,i] = mean((Hitters$Salary[folds == j] - pred)^2)
+  }
+}
+
+#Average over the columns
+mean.cv.errors = apply(cv.errors, 2, mean)
+plot(mean.cv.errors, type = "b")
+
+#The variable we choose
+coefficients(regsubsets(Salary~., data = Hitters, nvmax = 19), id = 11)
+```
+
+##Shrinkage Methods
+
+The two best-known techniques for shrinking the regression coefficients towards zero are ridge regression and the lasso.
+
+###Ridge Regression
+Ridge Regression is very similar to least squares, except that the coefficients are estimated by minimizing:
+
+$\sum_1^n(y_i-\beta_0-\sum_{j=1}^p\beta_jx_{ij})^2+\lambda\sum_{j=1}^p\beta_j^2=RSS+\lambda\sum_{j=1}^p\beta_j^2$
+
+Where $\lambda\ge0$ is a tunning parameter. This equation trades off two different criteria. As with least squares, ridge regression seeks coefficient estimates that fit the data well, by makeing the RSS small. However, the second term, $\lambda\sum_{j=1}^p\beta_j^2$, called a shrinkage penalty, is small when $\beta_1, \dots,\beta_p$ are close to zero. The tunning parameter serves to control the relative impact of these two terms.
+
+Ridge regression???s advantage over least squares is rooted in the bias-variance trade-off. As ?? increases, the flexibility of the ridge regression fit decreases, leading to decreased variance but increased bias.
+
+Ridge regression does have one obvious disadvantage. Unlike best subset, forward stepwise, and backward stepwise selection, which will generally select models that involve just a subset of the variables, ridge regression will include all p predictors in the final model.
+
+####Implementation in R
+The `glmnet()` function has an `alpha` argument that determines what type of model is fit. If `alpha = 0` then a ridge regression model is fit, and if `alpha = 1`, then a lasso is fit.
+
+One more thing need to notice is that here `predict()` function has different function when change the `type` argument. It is a little bit differnt from `predict.lm()`. More detailed information is included here: [link](https://www.rdocumentation.org/packages/glmnet/versions/2.0-10/topics/predict.glmnet)
+```{r, message=FALSE}
+library(glmnet)
+#x, y must be a matrix(exclude intercept) 
+x = model.matrix(Salary~., Hitters)[,-1]
+y = Hitters$Salary
+
+set.seed(1)
+train = sample(1:nrow(x), nrow(x)/2)
+test = (-train)
+y.test = y[test]
+
+#Use Cross-Validation to choose the optimal lambda
+set.seed(1)
+cv.out = cv.glmnet(x[train,], y[train], alpha = 0)
+plot(cv.out)
+bestlam = cv.out$lambda.min; bestlam
+
+#Test error 
+out = glmnet(x[train,], y[train], alpha = 0)
+ridge.pred = predict(out, s = bestlam, newx = x[test,])
+mean((ridge.pred - y.test)^2)
+
+#Final Model
+predict(out, type = "coefficients", s = bestlam)[1:20,]
+```
+
+###The Lasso
+The lasso is a relatively recent alternative to ridge regression that over comes the disadvantage ridge has. The lasso coefficients try to minimize the quantity:
+
+$\sum_{i=1}^{n}(y_i-\beta_0-\sum_{j=1}^p\beta_jx_{ij})^2+\lambda\sum_{j=1}^{p}|\beta_j|=RSS+\lambda\sum_{j=1}^p|\beta_j|$
+
+In the case of lasso, the $l_1$ penalty has the effect of forcing some of the coefficient estimates to be exactly equal to zero when the tuning parameter $\lambda$ is sufficiently large. Hense, the lasso performs variable selection.
+
+####Implementation in R
+
+```{r}
+#The function of variable selection
+##We could see that some of the coefficients will be exactly equal to zero.
+lasso.mod =glmnet (x[train,], y[train],alpha = 1)
+plot(lasso.mod)
+
+#Use cross-validation to choose the optimal lambda
+set.seed(1)
+cv.out = cv.glmnet(x[train,], y[train], alpha = 1)
+bestlam = cv.out$lambda.min; bestlam
+
+#Test error
+lasso.pred = predict(lasso.mod, s = bestlam, newx = x[test,])
+mean((lasso.pred-y.test)^2)
+
+#Variable selection
+out = glmnet(x, y, alpha = 1)
+lasso.coef = predict(out, type = "coefficients", s = bestlam)[1:20,]; lasso.coef
+lasso.coef[lasso.coef!=0]
+```
+###Comparison of Lasso and Ridge Regression
+
+In general, one might expect the lasso to perform better in a setting where a relatively small number of predictors have substantial coeffecients, and the remaining predictors have coefficients that are very small or that equal zero. Ridge regression will perform better when the response is a function of many predictors, all with coefficients of roughly equal size.
+
+##Dimension Reduction Methods
+
+We now explore a class of approaches that transform the predictors and then fit a least squares model using the transformed variables.
+
+Let $Z_1,Z_2,\dots,Z_M$ represent $M<p$ linear combinations of our original p predictors. That is, $$Z_m=\sum_{j=1}^p\phi_{jm}X_j$$
+
+We can then fit the linear regression model: $$y_i=\theta_0+\sum_{m=1}^M\theta_mz_{im}+\epsilon_i$$
+
+using least squares.
+
+The choice of $Z_1,Z_2,\dots,Z_M$, or equivalently, the selection of the $\phi_{jm}$'s, can be achieved in different ways. We will consider two approaches for this task: principal components and partial least squares.
+
+###Principal Components Regression
+
+Here I ignore the introduction of PCA since I will talk about it in details later.
+
+In PCR, the number of principal components, M, is typically chosen by cross-validation. When performing PCR, we generally recommend standardizing each predictor prior to generating the principal components. This standardization ensures that all variables are on the same scale.
+
+PCR suffers from a drawback: there is no guarantee that the
+directions that best explain the predictors will also be the best directions to use for predicting the response.
+
+####Implementation in R
+PCR can be performed using the `pcr()` function, which is part of the `pls` library.
+```{r, message=FALSE}
+library(pls)
+set.seed(1)
+#Perform PCR
+pcr.fit = pcr(Salary~., data = Hitters[train,] ,scale = T, validation = "CV")
+
+#Find the optimal number of PC
+summary(pcr.fit)
+validationplot(pcr.fit, val.type="MSEP")
+
+#Test error
+pcr.pred = predict(pcr.fit, x[test,], ncomp = 7)
+mean((pcr.pred - y.test)^2)
+
+#Fit the full model
+pcr.fit = pcr(y~x, scale = T, ncomp = 7)
+summary(pcr.fit)
+```
+
+###Partial Least Squares
+We now present partial least squares, a supervised alternative to PCR.Roughly speaking, the PLS approach attempts to find directions that help explain both the response and the predictors.
+
+We now describe how the first PLS direction is computed. After standardizing the p predictors, PLS computes the first direction $Z_1$ by setting each $\phi_{j1}$ equal to the coefficient from the simple linear regression of $Y$ onto $X_j$. One can show that this coefficient is proportional to the correlation between $Y$ and $X_j$. Hence, in computing $Z_1 = \sum_{j=1}^{p}\phi_{j1}X_j$, PLS places the highest weight on the variables that are most strongly related to the response.
+
+To identify the second PLS direction we first adjust each of the variables for $Z_1$, by regressing each variable on $Z_1$ and taking residuals. These residuals can be interpreted as the remaining information that has not been explained by the first PLS direction. We then compute $Z_2$ using this orthogonalized
+data in exactly the same fashion as $Z_1$ was computed based
+on the original data. This iterative approach can be repeated M times to identify multiple PLS components. Fianlly we use least squares to fit a linear model to predict $Y$ using $Z_1,\dots,Z_M$.
+
+As with PCR, the number M of partial least squares directions used in PLS is a tuning parameter that is typically chosen by cross-validation.
+
+####Implementation in R
+```{r}
+set.seed(1)
+#Perform PLS
+pls.fit = plsr(Salary~., data = Hitters[train,], scale = T, validation = "CV")
+
+#Find the optimal components
+summary(pls.fit)
+validationplot(pls.fit, val.type = "MSEP")
+
+#Test error
+pls.pred = predict(pls.fit, x[test,], ncomp = 2)
+mean((pls.pred - y.test)^2)
+
+#Fit the full model
+pls.fit = plsr(Salary~., data = Hitters, scale = T, validation = "CV", ncomp = 2)
+summary(pls.fit)
+##Notice that the percentage of variance in Salary that the two-component PLS fit explains, 46.40%, is almost as much as that explained using the final seven-component model PCR fit, 46.69 %. This is because PCR only attempts to maximize the amount of variance explained in the predictors, while PLS searches for directions that explain variance in both the predictors and the response.
+```
+
+
+
