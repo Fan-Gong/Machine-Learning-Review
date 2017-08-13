@@ -1,6 +1,11 @@
 # Machine-Learning-Review
 
-## Classification:
+## Linear Model Selection and Regularization
+* Subset Selection: Best Subset Selection; Forward Stepwise Selection; Backward Stepwise Selection.
+* Regularization: Ridge Regression; Lasso Regression.
+* Dimension Reduction: Principal Component Regression; Partial Least Squares Regression.
+
+## Classification
 * Logistic Regression
 * Linear Discriminant Analysis
 * Quadratic Discriminant Analysis
