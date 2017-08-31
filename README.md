@@ -27,7 +27,7 @@
 * Support Vector Machine
 
 ## Decision Tree
-* Single Desicion Tree: Regression Tree/Classification Tree
+* Single Decision Tree: Regression Tree/Classification Tree
 * Bagging
 * Random Forests
 * Boosting
