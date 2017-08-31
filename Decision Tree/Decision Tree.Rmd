@@ -1,0 +1,232 @@
+---
+title: "Decision Tree"
+author: "Fan Gong"
+date: "2017/8/30"
+output: github_document
+---
+
+#Decision Tree
+
+##Preview
+
+Tree-based methods are simple and useful for interpretation. However, they typically are not competitive with the best supervised learning approached. Hence we also introduce bagging, random forests, and boosting. Each of these approaches involves producing multiple trees which are then combined to yeild a single consensus prediction. We will see that combining a large number of trees can often result in dramatic improvements in prediction accuracy, at the expense of some loss in interpretation.
+
+##The Basics of Decision Trees
+
+Decision trees can be applied to both regression and classification problems. 
+
+###Regression Trees
+
+####Logic Design
+The goal is to find boxes $R_1,\dots,R_j$ that minimize the RSS given by
+$$\sum_{j=1}^{J}\sum_{i\in R_j}(y_i-\hat{y}_{R_j})$$
+where $\hat{y}_{R_j}$ is the mean response for the training observations within the $j$th box. However, it is computationally infeasibale, so we take a top-down, greedy approach that is known as recursive binary splitting.
+
+In order to perform recursive binary splitting, we first select the predictor $X_j$ and the cutpoint $s$ such that splitting the predictor space into regions $\{X|X_j<s\}$ and $\{X|X_j\ge s\}$ leads to the greatest possible reduction in RSS.
+
+Next we repeat this process but this time we split one of the two previously identified regions.
+
+####Tree Pruning
+The process described above may produce good predictions on the training set, but is likely to overfit the data, leading to poor test set performance. This is because the resulting tree might be too complex.
+
+Here we use cost complexity pruning-also known as weakest link pruning-gives us a way to do just this. Rather than considering every possible subtree, we consider a sequence of trees indexed by a nonnegative tunning parameter $\alpha$. For each value of $alpha$ there corresponds a subtree $T\subset T_0$ such that $$\sum_{m=1}^{|T|}\sum_{i:x_i \in R_m}(y_i-\hat{y}_{R_m})^2+\alpha|T|$$
+is as small as possible. The tunning parameter $\alpha$ controls a trade-off between the subtree's complexity and its fit to the training data.
+
+####Implementation in R
+
+The implementation procudure between regression tree and classification tree is that for regression tree we use `cv.tree(tree, FUN = pruen.tree)`, but for classification tree we use `cv.tree(tree, FUN = pruen.misclass)`
+```{r}
+library(tree)
+library(MASS)
+set.seed(1)
+head(Boston)
+#Create training data
+train = sample(1:nrow(Boston), nrow(Boston)/2)
+#Train the data
+tree.boston = tree(medv~., Boston, subset = train)
+summary(tree.boston)
+#Prune
+cv.boston = cv.tree(tree.boston, FUN = prune.tree)
+cv.boston
+plot(cv.boston$size ,cv.boston$dev ,type='b')
+
+#Get the tree model by using the tunning parameter from performing CV
+prune.boston = prune.tree(tree.boston, best = 8)
+
+#Test Error
+yhat = predict(prune.boston, Boston[-train,])
+boston.test = Boston[-train,"medv"]
+mean((yhat-boston.test)^2)
+```
+
+###Classification Trees
+
+For a regression tree, the predicted response for an observation is given by the mean response of the training observations that belong to the same terminal node. In contrast, we predict that each observation belongs to the most commonly occurring class of training observations in the region to which it belongs.
+
+Also, RSS cannot be used as a criterion for making the binary splits. A natural alternative to RSS is the mis-classification rate. the classification error rate is simply the fraction of the training observations in that region that do not belong to the most common class.
+$$E = 1-max_{k}(\hat{p}_{mk})$$
+Here $\hat{p}_{mk}$ represents the proportion of training observations in the mth region that are from the kth class. But E is not sensitive for tree-growing. So in practice two other measures are preferable:
+
+1. The Gini index:
+$$G = \sum_{k=1}^{K}\hat{p}_{mk}(1-\hat{p}_{mk})$$
+a measure of total variance across the K classes. (Referred to as a measure of node purity)
+
+2. Cross-entropy
+$$D = -\sum_{k=1}^{K}\hat{p}_{mk}log\hat{p}_{mk}$$
+Like the Gini index, the cross-entropy will take on a small value if the mth node is pure.
+
+####Implementation in R
+
+Here is the basic R code for a single classification tree.
+```{r}
+library(ISLR)
+attach(Carseats)
+#Create a classification dataset
+High = ifelse(Sales <= 8, "No", "Yes")
+Carseats = data.frame(Carseats, High)
+head(Carseats)
+
+#Train the tree model
+tree.carseats = tree(High~.-Sales, Carseats)
+summary(tree.carseats)
+
+#Plot the tree model
+plot(tree.carseats)
+text(tree.carseats,pretty = 0, cex = 0.7)
+
+```
+
+Then let us to evaluate the performance of a classification tree.
+```{r}
+#Create training set and test set
+set.seed(2)
+train = sample(1:nrow(Carseats), 200)
+Carseats.train = Carseats[train,]
+Carseats.test = Carseats[-train,]
+High.test = High[-train]
+
+#Train the model
+tree.carseats = tree(High~.-Sales, Carseats.train)
+tree.pred = predict(tree.carseats, newdata = Carseats.test, type = 'class')
+table(tree.pred, High.test)
+
+#Test error
+(86+57)/200
+
+#Prune the tree
+set.seed(3)
+cv.carseats = cv.tree(tree.carseats, FUN = prune.misclass)
+##size - the number of terminal nodes
+##dev - cross-validation error
+##k - cost-complexity parameter (alpha)
+cv.carseats
+##We see that the tree with 9 terminal nodes results in the lowest CV error
+par(mfrow =c(1,2))
+plot(cv.carseats$size ,cv.carseats$dev ,type="b")
+plot(cv.carseats$k ,cv.carseats$dev ,type="b")
+
+#Use the tunning parameter we get from performing CV
+prune.carseats = prune.misclass(tree.carseats, best = 9)
+tree.pred = predict(prune.carseats, Carseats.test, type = "class")
+table(tree.pred, High.test)
+
+#Test error
+(94+60)/200
+```
+
+##Bagging, Random Forests, Boosting
+Bagging, random forests, and boosting use trees as building blocks to construct more powerful prediction models.
+
+###Bagging
+
+Bootstrap aggregation, or bagging, is a general-purpose procedure for reducing the variance of a statistical learning method.
+
+####Bagging for regression tree
+To apply bagging to regression trees, we simply construct B regression trees using B bootstrapped training sets, and average the resulting predictions. These trees are grown deep,
+and are not pruned. Hence each individual tree has high variance, but low bias. Averaging these B trees reduces the variance. Bagging has been demonstrated to give impressive improvements in accuracy by combining together hundreds or even thousands of trees into a single procedure.
+
+####Bagging for classification tree
+For a given test observation, we can record the class predicted by each of the B trees, and take a majority vote: the overall prediction is the most commonly occurring
+majority class among the B predictions.
+
+####Out-of-Bag Error Estimation
+It turned out that there is a very straightforward way to estimate the test error of a bagged model, without the need to perform cross-validation. One can show that on average, each bagged tree makes use of around two-thirds of the observations. The remaining one-third of the observations not used to fit a given bagged tree referred to as the out-of-bag(OOB) observations.
+
+It can be shown that with B sufficiently large, OOB error is virtually equivalent to leave-one-out cross-validation error.
+
+####Variable Importance Measures
+As we have discussed, bagging typically results in improved accuracy over prediction using a single tree. Unfortunately, however, it can be difficult to interpret the resulting model. However, Although the collection of bagged trees is much more difficult to interpret than a single tree, one can obtain an overall summary of the importance of each predictor using the RSS or the Gini index.
+
+In the case of bagging regression trees, we can record the total amount that the RSS is decreased due to splits
+over a given predictor, averaged over all B trees. A large value indicates an important predictor. Similarly, in the context of bagging classification trees, we can add up the total amount that the Gini index is decreased by splits over a given predictor, averaged over all B trees.
+
+###Random Forests
+
+Random Forests provide an improvement over bagged trees by way of a samll tweak that decorrelates the trees. As in bagging, we build a number of decision trees on some correlated training samples, so bagging will not lead to a substantial reduction in variance. But for random forest, a random sample of $m$ predictors is chosen as split candidates from the full set of p predictors.
+
+Therefore, on average $(p ??? m)/p$ of the splits will not even consider the strong predictor, and so other predictors will have more of a chance. We can think of this process as decorrelating the trees, thereby making the average of the resulting trees less variable and hence more reliable.
+
+####Implementation in R
+Here we use `randomForest` package in R. Since bagging is simply a special case of a random forest with m = p. Therefore, the `randomForest()` function can be used to perform both random forests and bagging.
+```{r, message=FALSE}
+library(randomForest)
+set.seed(1)
+#Bagging
+##mtry - So all 13 predictors should be considered for each split of the tree
+##ntree - how many trees we grow by bagging
+ncol(Boston)-1
+bag.boston = randomForest(medv~., data = Boston, subset = train, mtry = 13, ntree = 500)
+bag.boston
+
+#Test error
+yhat.bag = predict(bag.boston, newdata = Boston[-train,])
+##The test MSE is almost half that abtained using an optimally-pruned single tree.
+mean((yhat.bag-boston.test)^2)
+
+#Random Forest
+##By default, randomForest() uses p/3 variables when building a random forest of regression trees, and sqrt(p) when building a classification tree. Here mtry = 6.
+set.seed(1)
+rf.boston = randomForest(medv~., data = Boston, subset = train, mtry = 6, importance = TRUE)
+
+#Test error
+yhat.rf = predict(rf.boston, newdata = Boston[-train,])
+mean((yhat.rf - boston.test)^2)
+
+#Importance of the variable
+##The former is the increase of MSE if the varibale is excluded, which means the larger the more important
+##The latter is a measure the increase of node purity if this variable is excluded. 
+importance(rf.boston)
+
+#Plot the importance of the variable
+##We could see lstat and rm are two most important variables.
+varImpPlot(rf.boston)
+```
+
+###Boosting
+Recall that bagging involves creating multiple copies of the original training data set using the bootstrap, fitting a separate decision tree to each copy, and then combining all of the trees in order to create a single predictive model. Boosting works in a similar way, except that the trees are
+grown sequentially: each tree is grown using information from previously grown trees. Boosting does not involve bootstrap sampling; instead each tree is fit on a modified version of the original data set.
+
+Boosting has three tunning parameters:
+
+1. The number of trees B. Unlike bagging and random forests, boosting can overfit if B is too large, although this overfitting tends to occur slowly if at all. We use cross-validation to select B.
+
+2. The shrinkage parameter ??, a small positive number. This controls the rate at which boosting learns. Typical values are 0.01 or 0.001, and the right choice can depend on the problem. Very small ?? can require using a very large value of B in order to achieve good performance.
+
+3. The number d of splits in each tree, which controls the complexity of the boosted ensemble. Often d = 1 works well, in which case each tree is a stump, consisting of a single split. In this case, the boosted ensemble is fitting an additive model, since each term involves only a single variable. More generally d is the interaction depth, and controls the interaction order of the boosted model, since d splits can involve depth at most d variables.
+
+####Implementation in R
+Here we use the gbm package, and within it the `gbm()` function, to fit boosted `gbm()` regression trees to the Boston data set. We run `gbm()` with the option `distribution="gaussian"` since this is a regression problem; if it were a binary classification problem, we would use `distribution="bernoulli"`. The argument `n.trees=5000` indicates that we want 5000 trees, and the option `interaction.depth=4` limits the depth of each tree.
+```{r}
+library(gbm)
+set.seed(1)
+
+#Train the boosting model
+boost.boston = gbm(medv~., data = Boston[train,], distribution = "gaussian", n.trees = 5000, interaction.depth = 4)
+
+#Importance of the variables
+summary(boost.boston)
+
+#Test error
+yhat.boost = predict(boost.boston, newdata = Boston[-train,], n.trees = 5000)
+mean((yhat.boost-boston.test)^2)
+```
