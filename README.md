@@ -25,3 +25,9 @@
 * Maximal Margin Classifier
 * Support Vector Classifier
 * Support Vector Machine
+
+## Decision Tree
+* Single Desicion Tree: Regression Tree/Classification Tree
+* Bagging
+* Random Forests
+* Boosting
