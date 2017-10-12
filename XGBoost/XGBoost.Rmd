@@ -1,0 +1,122 @@
+---
+title: "XGBoost Tutorial"
+author: "Fan Gong"
+date: "2017/10/8"
+output:
+  pdf_document: default
+  html_document: default
+---
+#XGBoost Tutorial
+
+##Dataset loading
+This dataset is very small to not make the R package too heavy, however XGBoost is built to manage huge dataset very efficiently.
+
+The data are stored in a `dgcMatrix` which is a sparse matrix and label vector is a numeric vector({0,1}). In a sparse matrix, cells contain 0 are not stored in memory. Therefore, in a dataset mainly made of 0, memory size is reduced. It is very usual to have such dataset.
+```{r}
+library(xgboost)
+data("agaricus.train", package = 'xgboost')
+data("agaricus.test", package = 'xgboost')
+
+train = agaricus.train
+test = agaricus.test
+str(train)
+
+dim(train$data)
+```
+
+##Model Training
+We will train decision tree model using following parameters:
+
+* `objetive = 'binary:logistic'` : we will train a binary classification model.
+* `max.deph = 2` : the trees won't be deep, because our case is very simple.
+* `nthread = 2` : the number of cpu threads we are going to use;
+* `nround = 2` : there will be two passes on the data, the second one will enhance the model by furter reducing the difference between ground truth and prediction.
+
+```{r}
+bstDense = xgboost(data = as.matrix(train$data), label = train$label, max.depth = 2, eta = 1, nthread = 2, nrounds = 2, objective = 'binary:logistic')
+
+
+```
+
+XGBoost has several features to help to view how the learning progress internally. The purpose is to help you to set the best parameters, which is the key of your model quality. One of the simplest way to see the training progress is to set the verbose option.
+```{r}
+dtrain = xgb.DMatrix(data= train$data, label = train$label)
+
+#verbose = 1, print evaluation metric
+bst = xgboost(data = dtrain, max.depth = 2, eta = 1, nthread = 2, nrounds = 2, objective = 'binary:logistic', verbose = 1)
+
+#verbose = 2, also print information about tree
+bst = xgboost(data = dtrain, max.depth = 2, eta = 1, nthread = 2, nrounds = 2, objective = 'binary:logistic', verbose = 2)
+
+```
+
+
+##Prediction
+```{r}
+pred = predict(bst, test$data)
+print(head(pred))
+```
+
+These numbers doesn't look binary classification (0,1). We need to perform a simple transformation before being able to use these results.
+The only thing that XGBoost does is a regrssion. XGBoost is using label vector to built its regression model.
+```{r}
+prediction = as.numeric(pred > 0.5)
+print(head(prediction))
+
+```
+
+
+##Measuring Model Performance
+To measure the model performance, we will compute a simple metric, the average error.
+```{r}
+err = mean(prediction != test$label)
+err
+```
+
+
+##Advanced Features
+Most of the features below have been implemented to help you to improve your model by offering a better understanding of its content.
+
+###Set Watchlist and Change Metrics
+One of the special feature of xgb.train is the capacity to follow the progress of the learning after each round. Because of the way boosting works, there is a time when having too many rounds lead to an overfitting. You can see this feature as a cousin of cross-validation method. The following techniques will help you to avoid overfitting or optimizing the learning time in stopping it as soon as possible.
+
+For this function, we need to use `xgb.train` function.
+```{r}
+dtrain = xgb.DMatrix(data = agaricus.train$data, label = agaricus.train$label)
+dtest = xgb.DMatrix(data = agaricus.test$data, label = agaricus.test$label)
+
+#Set the watchlist parameter
+watchlist = list(train = dtrain, test = dtest)
+bst = xgb.train(data=dtrain, max.depth= 2, eta = 1, nrounds = 4, nthread = 2, watchlist = watchlist, objective = 'binary:logistic')
+
+#set some specific metric or even use multiple evaluation metrics
+bst = xgb.train(data=dtrain, max.depth=2, eta=1, nthread = 2, nround=2, watchlist=watchlist, eval.metric = "error", eval.metric = "logloss", objective = "binary:logistic")
+
+```
+
+###Change Boosting Type
+Until now, all the learnings we have performed were based on boosting trees. Then I will try to implement another algorithm, based on linear boosting. The only difference with previous command is `booster = 'gblinear'` parameter (and removing eta parameter).
+```{r}
+bst = xgb.train(data=dtrain, booster = "gblinear", max.depth=2, nthread = 2, nround=2, watchlist=watchlist, eval.metric = "error", eval.metric = "logloss", objective = "binary:logistic")
+```
+In this case, linear boosting gets slightly better performance metrics than decision trees based algorithm.
+
+###View Feature Importance 
+```{r}
+importance_matrix = xgb.importance(model = bst)
+print(importance_matrix)
+
+xgb.plot.importance(importance_matrix = importance_matrix)
+```
+
+
+###View the trees from a model
+You can dump the tree you learned using `xgb.dump` into a text file.
+```{r}
+bst = xgb.train(data=dtrain, booster = "gbtree", max.depth=2, nthread = 2, nround=2, watchlist=watchlist, eval.metric = "error", eval.metric = "logloss", objective = "binary:logistic")
+
+xgb.dump(bst, with_stats = F)
+
+#Also we can plot the tree
+xgb.plot.tree(model = bst)
+```
